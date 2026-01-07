@@ -4,19 +4,16 @@ local Workspace = game:GetService("Workspace")
 local LP = Players.LocalPlayer
 local COREGUI = game.CoreGui
 
--- Очистка старых ESP
 for _, v in pairs(COREGUI:GetChildren()) do
     if v.Name == "Boat_ESP" then
         v:Destroy()
     end
 end
 
--- Создаём папку для ESP
 local BoatESPfolder = Instance.new("Folder")
 BoatESPfolder.Name = "Boat_ESP"
 BoatESPfolder.Parent = COREGUI
 
--- Находим все лодки
 local function findAllBoats()
     local boatWorkspace = Workspace:FindFirstChild("Game Systems")
     if not boatWorkspace then return {} end
@@ -45,9 +42,7 @@ local function findAllBoats()
     return foundBoats
 end
 
--- Создаём ESP для одной лодки
 local function createBoatESP(boatData)
-    -- Highlight (подсветка)
     local highlight = Instance.new("Highlight")
     highlight.Name = "Boat_Highlight"
     highlight.Adornee = boatData.model
@@ -57,7 +52,6 @@ local function createBoatESP(boatData)
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Parent = boatData.model
     
-    -- BillboardGui (текст над лодкой)
     local billboard = Instance.new("BillboardGui")
     billboard.Name = boatData.name .. "_ESP"
     billboard.Adornee = boatData.primaryPart
@@ -90,12 +84,10 @@ local function createBoatESP(boatData)
     }
 end
 
--- Функция поиска здоровья лодки
 local function findBoatHealth(boatModel)
     local healthValue = 0
     local maxHealthValue = 0
     
-    -- Ищем в разных местах
     local function checkHealth(obj)
         if obj:IsA("Humanoid") then
             return obj.Health, obj.MaxHealth
@@ -107,7 +99,6 @@ local function findBoatHealth(boatModel)
         return nil, nil
     end
     
-    -- Проверяем прямые дочерние объекты
     for _, child in ipairs(boatModel:GetChildren()) do
         local hp, maxHP = checkHealth(child)
         if hp then
@@ -116,7 +107,6 @@ local function findBoatHealth(boatModel)
             break
         end
         
-        -- Проверяем вложенные объекты (например, в Stats)
         if child:IsA("Folder") or child:IsA("Model") then
             for _, subChild in ipairs(child:GetChildren()) do
                 local hp2, maxHP2 = checkHealth(subChild)
@@ -129,20 +119,18 @@ local function findBoatHealth(boatModel)
         end
     end
     
-    -- Если здоровье не найдено, ищем MaxHealth отдельно
     if healthValue > 0 and maxHealthValue == 0 then
         local maxHealth = boatModel:FindFirstChild("MaxHealth")
         if maxHealth and (maxHealth:IsA("NumberValue") or maxHealth:IsA("IntValue")) then
             maxHealthValue = maxHealth.Value
         else
-            maxHealthValue = 100 -- Значение по умолчанию
+            maxHealthValue = 100
         end
     end
     
     return healthValue, maxHealthValue
 end
 
--- Обновляем ESP
 local function updateBoatESP(espData)
     if not espData.model or not espData.model.Parent then
         if espData.highlight then espData.highlight:Destroy() end
@@ -150,10 +138,8 @@ local function updateBoatESP(espData)
         return false
     end
     
-    -- Ищем здоровье
     local healthValue, maxHealthValue = findBoatHealth(espData.model)
     
-    -- Дистанция
     local distance = 0
     if LP.Character then
         local charRoot = LP.Character:FindFirstChild("HumanoidRootPart") or LP.Character.PrimaryPart
@@ -162,7 +148,6 @@ local function updateBoatESP(espData)
         end
     end
     
-    -- Форматируем текст
     local displayText = ""
     
     if healthValue > 0 and maxHealthValue > 0 then
@@ -175,7 +160,6 @@ local function updateBoatESP(espData)
             math.floor(distance)
         )
         
-        -- Цвет по здоровью
         if healthPercent < 30 then
             espData.textLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
             espData.highlight.FillColor = Color3.fromRGB(255, 50, 50)
@@ -187,7 +171,6 @@ local function updateBoatESP(espData)
             espData.highlight.FillColor = Color3.fromRGB(0, 150, 255)
         end
     else
-        -- Если здоровье не найдено
         displayText = string.format("🚢 %s\n📏 Дистанция: %d studs\nℹ️ HP: Не найдено", 
             espData.name,
             math.floor(distance)
@@ -201,30 +184,21 @@ local function updateBoatESP(espData)
     return true
 end
 
--- Основной цикл
 local trackedBoats = {}
-local initialized = false
+local connection
 
 local function mainESP()
-    -- Ищем лодки
     local foundBoats = findAllBoats()
     
-    -- Добавляем новые
     for _, boatData in ipairs(foundBoats) do
         if not trackedBoats[boatData.model] then
             local espData = createBoatESP(boatData)
             if espData then
                 trackedBoats[boatData.model] = espData
-                if not initialized then
-                    print("[Boat ESP] Активирован. Отслеживается: " .. boatData.name)
-                end
             end
         end
     end
     
-    initialized = true
-    
-    -- Обновляем и удаляем старые
     for model, espData in pairs(trackedBoats) do
         if not updateBoatESP(espData) then
             trackedBoats[model] = nil
@@ -232,8 +206,6 @@ local function mainESP()
     end
 end
 
--- Запуск
-local connection
 local function startESP()
     if connection then
         connection:Disconnect()
@@ -244,43 +216,7 @@ local function startESP()
     end)
 end
 
-local function stopESP()
-    if connection then
-        connection:Disconnect()
-    end
-    
-    -- Очищаем всё
-    for model, espData in pairs(trackedBoats) do
-        if espData.highlight then 
-            pcall(function() espData.highlight:Destroy() end) 
-        end
-        if espData.billboard then 
-            pcall(function() espData.billboard:Destroy() end) 
-        end
-    end
-    
-    trackedBoats = {}
-    
-    if BoatESPfolder then
-        BoatESPfolder:Destroy()
-    end
-    
-    print("[Boat ESP] Выключен")
-end
-
--- Автостарт
 wait(1)
 startESP()
-print("[Boat ESP] Запущен (Insert - перезапуск, Delete - выключить)")
 
--- Управление
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Insert then
-        stopESP()
-        wait(0.1)
-        startESP()
-        print("[Boat ESP] Перезапущен")
-    elseif input.KeyCode == Enum.KeyCode.Delete then
-        stopESP()
-    end
-end)
+print("boat esp loaded")
